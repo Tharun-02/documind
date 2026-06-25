@@ -1,0 +1,33 @@
+# DocuMind - .gitignore
+
+# !! CRITICAL !! — API keys and secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Uploads (user files — not committed)
+uploads/
+
+# DB
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/

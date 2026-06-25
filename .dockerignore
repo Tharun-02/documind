@@ -1,0 +1,43 @@
+# DocuMind - .dockerignore
+# Prevents these from being copied into the Docker image
+# Keeps image small and secrets safe
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist/
+build/
+
+# Virtual environments (Docker builds its own)
+.venv
+venv/
+env/
+
+# Secrets — NEVER bake into image
+.env
+
+# Git
+.git
+.gitignore
+.github
+
+# Tests (not needed in production image)
+tests/
+pytest.ini
+
+# Dev files
+*.md
+.dockerignore
+Makefile
+
+# Local uploads (mounted at runtime via volume)
+uploads/
+
+# IDE
+.vscode/
+.idea/
+*.swp

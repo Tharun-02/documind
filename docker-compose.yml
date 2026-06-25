@@ -1,0 +1,91 @@
+version: "3.9"
+
+# DocuMind - docker-compose.yml
+# Start: docker-compose up --build
+# Stop:  docker-compose down
+
+services:
+
+  # ──────────────────────────────────────────────
+  # 1. FastAPI Application
+  # ──────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: documind_app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Use service name "db" not "localhost" — Docker DNS!
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/documind
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app                        # hot reload — local changes reflect instantly
+      - /app/.venv                    # prevent host .venv from overwriting container's
+    command: ["/opt/venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - documind_network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # 2. PostgreSQL Database
+  # ──────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: documind_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: documind
+    volumes:
+      - postgres_data:/var/lib/postgresql/data         # named volume — data persists across restarts
+    ports:
+      - "5432:5432"               # expose so you can connect via TablePlus / DBeaver
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d documind"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - documind_network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # 3. Redis  (message broker for background tasks)
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: documind_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - documind_network
+    restart: unless-stopped
+
+# ──────────────────────────────────────────────
+# Named Volumes — managed by Docker, persist across restarts
+# ──────────────────────────────────────────────
+volumes:
+  postgres_data:
+
+# ──────────────────────────────────────────────
+# Private network — all services can reach each other by name
+# ──────────────────────────────────────────────
+networks:
+  documind_network:
+    driver: bridge

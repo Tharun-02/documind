@@ -1,0 +1,947 @@
+DAY 2 — FASTAPI AUTH SYSTEM
+Complete File Checklist & Code Explanations
+═══════════════════════════════════════════════════════════════════════════════
+
+📁 FILES TO CREATE/UPDATE — IN ORDER
+═══════════════════════════════════════════════════════════════════════════════
+
+1. app/config.py (NEW) — reads .env file
+2. app/database.py (NEW) — SQLAlchemy setup  
+3. app/__init__.py (NEW) — empty package marker
+4. app/models/user.py (NEW) — User database table definition
+5. app/models/__init__.py (NEW) — imports models
+6. app/schemas/auth.py (NEW) — Pydantic request/response shapes
+7. app/schemas/__init__.py (NEW) — empty package marker
+8. app/dependencies.py (NEW) — JWT verification dependency
+9. app/services/auth_service.py (NEW) — password hashing + JWT creation
+10. app/services/__init__.py (NEW) — empty package marker
+11. app/api/__init__.py (NEW) — empty package marker
+12. app/api/routes/__init__.py (NEW) — empty package marker
+13. app/api/routes/auth.py (NEW) — register, login, me routes
+14. main.py (UPDATED) — wire everything together
+15. .env.example (UPDATED) — add SECRET_KEY instructions
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 1: app/config.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Read your .env file once at startup and make all settings available as a Python object
+throughout your app. Instead of os.environ.get("KEY") scattered everywhere, you have
+one clean Settings object.
+
+WHY THIS IS BETTER:
+- Type hints: IDE autocomplete works
+- Validation: Pydantic checks types on startup, not at runtime
+- One place to change config: update .env, everything updates
+- Clear what's required: missing required var = error on startup (not a mysterious crash later)
+
+
+CODE EXPLANATION:
+
+```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from functools import lru_cache
+
+class Settings(BaseSettings):
+```
+→ Inherit from BaseSettings (not BaseModel). BaseSettings knows to read .env files.
+
+```python
+    APP_NAME: str = "DocuMind"
+    DEBUG: bool = False
+```
+→ Type hints with default values. If .env has APP_NAME, it overwrites the default.
+→ If .env doesn't have it, the default is used.
+
+```python
+    DATABASE_URL: str
+```
+→ NO default value = REQUIRED. If .env doesn't have DATABASE_URL, Pydantic raises an error
+  on startup before the app even boots. You catch config errors immediately.
+
+```python
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+```
+→ env_file=".env": read from this file
+→ extra="ignore": if .env has RANDOM_VAR=value that we don't use, ignore it (no error)
+
+```python
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+```
+→ @lru_cache() is a Python decorator that caches the function result
+→ First call: creates Settings object by reading .env
+→ Future calls: returns the cached object from memory
+→ Why: we don't want to re-read .env on every request (slow + wasteful)
+→ settings = get_settings() at the module level means we read .env once on app startup
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 2: app/database.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Set up SQLAlchemy's engine (connection to Postgres), session factory (connection pool),
+and the Base class that all your models inherit from.
+
+WHY THIS FILE:
+- Centralizes database setup (one file, one place to debug)
+- Provides a dependency injection function (get_db) for FastAPI
+- Defines Base for all models to inherit from
+
+
+CODE EXPLANATION:
+
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+
+from app.config import settings
+```
+→ Import everything we need. settings comes from config.py (reads .env)
+
+```python
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+)
+```
+→ create_engine() opens a connection to Postgres
+→ settings.DATABASE_URL is like "postgresql://postgres:postgres@db:5432/documind"
+→ pool_pre_ping=True: before using a connection, test it with SELECT 1
+  (prevents "connection closed" errors if Postgres restarts while app is running)
+→ pool_size=5: keep 5 connections open simultaneously
+→ max_overflow=10: allow up to 10 extra connections when demand spikes (connection pool doesn't exceed 15)
+
+```python
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+```
+→ SessionLocal is a FACTORY — call it to make new session objects
+→ autocommit=False: we manually call session.commit() — nothing saves until we say so
+→ autoflush=False: we control when SQLAlchemy sends SQL to the DB
+→ bind=engine: use the engine we just created
+
+```python
+Base = declarative_base()
+```
+→ Base is the parent class for all your models
+→ When you do class User(Base): SQLAlchemy knows this is a table definition
+→ Base.metadata.create_all() later will create all tables defined by classes inheriting from Base
+
+```python
+def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+→ This is a FastAPI DEPENDENCY — a function that runs before each request handler
+→ SessionLocal() creates a NEW session for this request
+→ yield db: give the session to the route handler
+→ finally: db.close() ALWAYS runs (even if the route handler crashes)
+→ Why finally: prevents connection leaks (sessions stuck open)
+→ How to use: def my_route(db: Session = Depends(get_db)):
+
+→ Generator[Session, None, None] is a type hint that says:
+  "this function yields a Session object, receives nothing from the caller, returns nothing"
+
+```python
+def create_tables():
+    Base.metadata.create_all(bind=engine)
+```
+→ Called at app startup (from main.py)
+→ Looks at all classes that inherit from Base (User, Document, QueryLog etc.)
+→ For each one, CREATE TABLE IF NOT EXISTS in Postgres
+→ Won't overwrite existing data — safe to call multiple times
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 3: app/models/user.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Define what the "users" table looks like in Postgres.
+This is SQLAlchemy ORM code — it maps Python classes to database tables.
+
+KEY CONCEPT: Model vs Schema
+- Model (this file): talks to DATABASE — SQLAlchemy columns map to Postgres columns
+- Schema (auth.py):  talks to HTTP — Pydantic validates request/response JSON
+They're separate because API input ≠ DB storage
+  (API gets "password", DB stores "hashed_password")
+
+
+CODE EXPLANATION:
+
+```python
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.sql import func
+from app.database import Base
+
+class User(Base):
+    __tablename__ = "users"
+```
+→ Inherit from Base (from database.py)
+→ __tablename__ = "users" tells SQLAlchemy to create a table called "users" in Postgres
+
+```python
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+        autoincrement=True,
+    )
+```
+→ id is the PRIMARY KEY (unique identifier for each row)
+→ Integer type → SQL INT
+→ primary_key=True: Postgres enforces uniqueness + makes this the main identifier
+→ index=True: Postgres creates an index (faster lookups by id)
+→ autoincrement=True: Postgres auto-assigns 1, 2, 3... when rows are inserted
+
+→ In Postgres this becomes: id INT PRIMARY KEY AUTO_INCREMENT
+
+```python
+    email = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+```
+→ String type → SQL VARCHAR
+→ unique=True: Postgres constraint — no two rows can have the same email
+→ index=True: speeds up queries like "find user by email"
+→ nullable=False: SQL NOT NULL constraint — email is required
+
+→ In Postgres: email VARCHAR NOT NULL UNIQUE
+
+```python
+    hashed_password = Column(
+        String,
+        nullable=False,
+    )
+```
+→ NEVER store plain text passwords
+→ We store bcrypt hashes (60 characters) in this column
+→ When user logs in, we hash their submission and compare hashes
+
+→ In Postgres: hashed_password VARCHAR NOT NULL
+
+```python
+    is_active = Column(
+        Boolean,
+        default=True,
+    )
+```
+→ Boolean type → SQL BOOLEAN
+→ default=True: when we create a new User without specifying is_active,
+  SQLAlchemy sets it to True
+
+→ In Postgres: is_active BOOLEAN DEFAULT TRUE
+
+```python
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+```
+→ DateTime(timezone=True) → SQL TIMESTAMP WITH TIME ZONE (stores timezone info)
+→ server_default=func.now(): the DATABASE (Postgres) sets this to NOW() when row is inserted
+→ We DON'T pass created_at from Python — the DB does it automatically
+→ Why: ensures all timestamps are consistent (DB server time, not client time)
+
+→ In Postgres: created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+```python
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+```
+→ server_default=func.now(): set to NOW() on INSERT
+→ onupdate=func.now(): Postgres updates this to NOW() on every UPDATE
+→ So if we call db.commit() after changing a user, updated_at automatically updates
+
+→ In Postgres: updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+```python
+    def __repr__(self):
+        return f"<User id={self.id} email={self.email}>"
+```
+→ Python magic method — controls what print(user) shows
+→ Without this, you'd see <__main__.User object at 0x...> (not helpful)
+→ With this, you see <User id=1 email=alice@example.com> (much clearer for debugging)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 4: app/schemas/auth.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Define the shapes of data coming IN (request bodies) and going OUT (responses) of your API.
+This is Pydantic code — it validates HTTP JSON, not database data.
+
+KEY: Schemas validate HTTP. Models are database tables. They look similar but are separate.
+
+
+CODE EXPLANATION:
+
+```python
+from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime
+
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, description="Minimum 8 characters")
+```
+→ BaseModel: Pydantic class for HTTP request/response validation
+→ This schema defines the body of POST /auth/register
+
+→ email: EmailStr means:
+  - FastAPI AUTOMATICALLY validates it's a real email format
+  - "notanemail" → automatic 422 Unprocessable Entity error
+  - You don't write the validation code — Pydantic does it
+
+→ password: str = Field(min_length=8)
+  - FastAPI AUTOMATICALLY validates length >= 8
+  - "pass" → 422 error automatically
+  - Field() adds metadata (min_length, description for docs)
+
+→ When FastAPI receives POST /auth/register with {"email": "x@y.com", "password": "pass123"}
+  it creates a UserRegister object and passes it to your route handler
+→ If validation fails, FastAPI returns 422 WITHOUT running your code
+
+→ This saves you from writing:
+  if not isinstance(email, str): raise...
+  if len(password) < 8: raise...
+  ... for every route. Pydantic does it.
+
+```python
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+```
+→ Defines what we RETURN after successful register
+
+→ Notice: NO hashed_password, NO updated_at
+→ We only return what the client needs
+→ Sensitive fields (hashed_password) are left out
+
+→ model_config = {"from_attributes": True}:
+  - Tells Pydantic to read from SQLAlchemy model attributes
+  - Without this, Pydantic only reads dicts
+  - So when we return a SQLAlchemy User object, Pydantic can extract id, email etc. from it
+
+→ When you do return new_user (a SQLAlchemy User object):
+  FastAPI serializes it through UserResponse, returning only those 4 fields as JSON
+
+```python
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+```
+→ Returned after POST /auth/login
+→ access_token is the JWT string
+→ token_type = "bearer" is a default — most responses have this
+
+```python
+class TokenData(BaseModel):
+    email: str | None = None
+```
+→ This is what we DECODE from a JWT token
+→ "sub" (subject) claim in the token contains the email
+→ We use this in dependencies.py to verify the token
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 5: app/dependencies.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Define reusable FastAPI dependencies — functions that run before route handlers.
+Main dependency: get_current_user — verifies JWT and returns the authenticated user.
+
+
+CODE EXPLANATION:
+
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.user import User
+from app.schemas.auth import TokenData
+from app.config import settings
+```
+→ Standard imports for auth
+
+```python
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+```
+→ OAuth2PasswordBearer tells FastAPI: "JWT tokens come from the Authorization header"
+→ tokenUrl="/auth/login" tells Swagger UI where to send login requests
+→ When you click "Authorize" in /docs, it sends you to /auth/login
+
+→ This automatically handles reading the Authorization header
+→ Your routes don't manually parse "Authorization: Bearer xyz"
+→ Depends(oauth2_scheme) extracts the token automatically
+
+```python
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+```
+→ This is a DEPENDENCY function — FastAPI calls it before your route handler runs
+→ token: Depends(oauth2_scheme) → FastAPI reads Authorization header, extracts token
+→ db: Depends(get_db) → FastAPI opens a DB session (from database.py)
+→ Returns: User object if valid, raises 401 if invalid
+
+→ How to use in a route:
+  @app.get("/protected")
+  def protected(current_user: User = Depends(get_current_user)):
+      return {"message": f"Hello {current_user.email}"}
+
+→ If token is missing/invalid, FastAPI STOPS here and returns 401
+→ Your route handler ONLY runs if the dependency succeeds
+
+```python
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+```
+→ Pre-define the error we'll raise if token is invalid
+→ 401: standard "authentication failed" status code
+→ headers={"WWW-Authenticate": "Bearer"}: tells clients how to authenticate (HTTP standard)
+
+```python
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+```
+→ jwt.decode() does TWO things:
+  1. Verifies the signature using SECRET_KEY
+     (if someone tampered with the token, signature won't match → JWTError)
+  2. Checks expiry (exp claim) — if token expired → JWTError
+
+→ If both pass, return the decoded payload (the dict inside the token)
+
+```python
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = TokenData(email=email)
+```
+→ Extract the "sub" (subject) claim from the token payload
+→ We stored the user's email here when creating the token
+→ If "sub" is missing, raise 401
+
+```python
+    except JWTError:
+        raise credentials_exception
+```
+→ If jwt.decode() raised an error (tampered token, expired, invalid signature)
+→ Catch it and return 401
+
+```python
+    user = db.query(User).filter(User.email == token_data.email).first()
+    if user is None:
+        raise credentials_exception
+```
+→ Fetch the user from Postgres using the email from the token
+→ If user doesn't exist (was deleted after token was issued), raise 401
+
+→ Why check the DB? The token is just bytes — someone could forge a token for
+  a user that doesn't actually exist. We verify in the DB.
+
+```python
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user",
+        )
+    return user
+```
+→ If user is disabled (is_active=False), return 400 Bad Request
+→ Otherwise return the user object to your route handler
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 6: app/services/auth_service.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Pure business logic for password hashing and JWT creation.
+NO HTTP here, NO database here — just pure Python functions.
+This allows you to test auth logic without running a web server.
+
+
+CODE EXPLANATION:
+
+```python
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+```
+→ CryptContext manages password hashing
+→ schemes=["bcrypt"]: use bcrypt as the hashing algorithm
+  - bcrypt is intentionally slow (prevents brute-force attacks)
+  - includes a random salt (same password → different hash each time)
+→ deprecated="auto": if we switch algorithms later, passlib auto-rehashes on next login
+
+```python
+def hash_password(plain_password: str) -> str:
+    return pwd_context.hash(plain_password)
+```
+→ Takes "mypassword123" and returns "$2b$12$K8Nv3q5Xm..." (60-char hash)
+→ The hash includes the salt inside it
+→ Same password hashed twice = different hashes (random salt)
+→ This is CORRECT and expected behavior
+
+→ NEVER do: if password == stored_password
+→ ALWAYS do: if hash_password(submitted) == stored_hash? NO, use verify_password()
+
+```python
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+```
+→ Takes the plain text password and the stored hash
+→ bcrypt extracts the salt from the hash
+→ Hashes the plain password with that salt
+→ Compares the result to the stored hash
+→ Returns True if they match
+
+→ Why this works:
+  hash("password123") with salt1 = "$2b$12$K8N..."
+  hash("password123") with salt1 = "$2b$12$K8N..."  ← same result
+  hash("wrongpassword") with salt1 = "$2b$12$XyZ..."  ← different result
+
+```python
+from datetime import datetime, timedelta, timezone
+from jose import jwt
+
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None
+) -> str:
+```
+→ Takes a dict (typically {"sub": "user@email.com"}) and creates a signed JWT
+→ returns a string like "eyJ0eXAiOiJKV1QiLCJhbGci..."
+
+```python
+    to_encode = data.copy()
+```
+→ Copy the dict so we don't mutate the original
+→ Python dict operations are passed by reference — data would be modified if we didn't copy
+
+```python
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+```
+→ Calculate when the token expires
+→ timezone.utc: always use UTC, never local time (prevents bugs across timezones)
+→ If expires_delta is passed, use it; otherwise use the setting (30 minutes)
+
+```python
+    to_encode.update({"exp": expire})
+```
+→ Add "exp" (expiry) claim to the token data
+→ "exp" is a standard JWT claim — jose automatically checks it on decode
+
+```python
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+    return encoded_jwt
+```
+→ jwt.encode() creates the JWT:
+  1. Encodes the payload as base64
+  2. Signs it with SECRET_KEY using HS256
+  3. Returns "xxxxx.yyyyy.zzzzz"
+
+→ The structure is:
+  - xxxxx: base64({"alg": "HS256", "typ": "JWT"})
+  - yyyyy: base64({"sub": "user@email.com", "exp": ...})
+  - zzzzz: HMACSHA256(xxxxx.yyyyy, SECRET_KEY)
+
+→ If anyone tampers with the payload, the signature won't match
+→ If they don't have SECRET_KEY, they can't create a valid signature
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 7: app/api/routes/auth.py
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+The actual HTTP endpoint handlers for register, login, and me routes.
+These handle HTTP requests and responses — calling services and database.
+
+
+CODE EXPLANATION:
+
+```python
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.user import User
+from app.schemas.auth import UserRegister, UserLogin, UserResponse, TokenResponse
+from app.services.auth_service import hash_password, verify_password, create_access_token
+from app.dependencies import get_current_user
+
+router = APIRouter()
+```
+→ APIRouter is like a mini FastAPI app — collects routes
+→ main.py will include this router at /auth prefix
+→ So router.post("/register") becomes POST /auth/register in the full app
+
+```python
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register(
+    user_data: UserRegister,
+    db: Session = Depends(get_db),
+):
+```
+→ @router.post("/register"): handles POST /auth/register
+→ response_model=UserResponse: FastAPI validates AND shapes the response through this schema
+  - Only returns fields in UserResponse (id, email, is_active, created_at)
+  - Hides hashed_password (not in the schema)
+→ status_code=201: return 201 Created (more correct than 200 for new resources)
+→ user_data: FastAPI validates the JSON body against UserRegister
+→ db: FastAPI opens a DB session (and closes it after the route completes)
+
+```python
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+```
+→ db.query(User): SELECT * FROM users
+→ .filter(User.email == user_data.email): WHERE email = 'x@y.com'
+→ .first(): LIMIT 1, return first row or None
+→ If email exists, raise 400 Bad Request (client sent invalid data)
+
+```python
+    hashed = hash_password(user_data.password)
+    new_user = User(
+        email=user_data.email,
+        hashed_password=hashed,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+```
+→ hash_password(): call our service to bcrypt the password
+→ User(): create a SQLAlchemy User model object (not in DB yet, just in memory)
+→ db.add(): stage the INSERT (like git add)
+→ db.commit(): execute the INSERT to Postgres (like git commit)
+→ db.refresh(): reload the object from DB to get auto-generated id, created_at etc.
+
+→ After refresh, new_user.id = 1 (assigned by Postgres)
+→ new_user.created_at = (set by Postgres with NOW())
+
+```python
+    return new_user
+```
+→ Return the User object
+→ FastAPI serializes it through UserResponse schema
+→ Returns JSON: {"id": 1, "email": "...", "is_active": true, "created_at": "..."}
+→ hashed_password is NOT returned (not in UserResponse)
+
+```python
+@router.post("/login", response_model=TokenResponse)
+def login(user_data: UserLogin, db: Session = Depends(get_db)):
+```
+→ POST /auth/login
+→ Returns TokenResponse: {"access_token": "...", "token_type": "bearer"}
+
+```python
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+```
+→ Find user by email
+→ If user doesn't exist OR password is wrong, raise 401
+→ We return the SAME error message for both cases
+  (prevents "user enumeration" — attacker probes which emails are registered)
+→ verify_password(): calls our service to check password vs hash
+
+```python
+    access_token = create_access_token(data={"sub": user.email})
+    return TokenResponse(access_token=access_token, token_type="bearer")
+```
+→ create_access_token(): sign a JWT containing the user's email
+→ Return the token to the client
+→ Client stores it (localStorage, state, etc.) and sends it on every future request
+
+```python
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+```
+→ GET /auth/me
+→ current_user: Depends(get_current_user) runs the dependency from dependencies.py
+  - Reads Authorization header
+  - Decodes JWT
+  - Verifies signature
+  - Fetches user from DB
+  - Returns User object to this function
+→ If token is missing/invalid, FastAPI returns 401 BEFORE this function runs
+
+```python
+    return current_user
+```
+→ Return the user
+→ FastAPI serializes through UserResponse schema
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 8: main.py (UPDATED)
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE:
+Main FastAPI application. Sets up the app, middleware, error handlers, and includes routers.
+
+KEY CONCEPTS:
+- Lifespan: startup/shutdown code
+- Routers: group related endpoints
+- Middleware: runs before every request (CORS, logging etc.)
+- Exception handlers: catch errors globally
+
+
+CODE EXPLANATION:
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.database import create_tables
+from app.api.routes import auth
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── STARTUP ───────────────────────────────────────────────────────────
+    print("🚀 DocuMind starting up...")
+    create_tables()
+    print("✅ Database tables ready")
+    
+    yield  # app runs here
+    
+    # ── SHUTDOWN ──────────────────────────────────────────────────────────
+    print("🛑 DocuMind shutting down...")
+```
+→ @asynccontextmanager: run code at startup AND shutdown
+→ Everything before yield: startup code
+→ yield: hands control to FastAPI, app runs
+→ Everything after yield: shutdown code
+
+→ create_tables(): SQLAlchemy creates users, documents, query_log tables in Postgres
+  (if they don't exist)
+→ Runs once on app startup
+
+```python
+app = FastAPI(
+    title="DocuMind API",
+    description="...",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+```
+→ Create the FastAPI app
+→ title/description: shown in Swagger UI
+→ docs_url="/docs": Swagger at localhost:8000/docs
+→ redoc_url="/redoc": alternative docs at localhost:8000/redoc
+→ lifespan=lifespan: use our startup/shutdown code
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+→ CORS (Cross-Origin Resource Sharing): allows browsers to call your API
+→ allow_origins=["*"]: allow any domain (fine for dev, lock down in production)
+→ allow_methods=["*"]: allow GET, POST, PUT, DELETE etc.
+→ allow_headers=["*"]: allow any headers (including Authorization)
+
+→ Without this, browser requests fail with CORS error
+
+```python
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "type": type(exc).__name__,
+        },
+    )
+```
+→ Catches ANY unhandled exception in the entire app
+→ Returns clean JSON instead of a raw Python traceback
+→ Status 500: generic server error
+
+→ Without this, if your code crashes, the client sees the full Python stack trace
+→ With this, you hide internals but still know the error type
+
+```python
+app.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["Authentication"],
+)
+```
+→ Include the auth router at /auth prefix
+→ auth.router.post("/register") becomes POST /auth/register
+→ tags=["Authentication"]: groups these routes in Swagger UI
+
+```python
+@app.get("/health", tags=["System"])
+async def health_check():
+    return {"status": "ok", "service": "documind"}
+
+@app.get("/", tags=["System"])
+async def root():
+    return {...}
+```
+→ Simple system routes
+→ /health: used by Docker HEALTHCHECK and Railway monitoring
+→ /: welcome message
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE 9: .env.example (UPDATED)
+═══════════════════════════════════════════════════════════════════════════════
+
+Added SECRET_KEY with instructions to generate one.
+
+SECRET_KEY generates a signing key for JWT tokens. It's a random 64-char hex string.
+Keep it secret — if someone gets it, they can forge JWT tokens.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+EMPTY PACKAGE FILES (just need to exist — they're empty)
+═══════════════════════════════════════════════════════════════════════════════
+
+These files tell Python "this folder is a package" (can be imported):
+- app/__init__.py
+- app/models/__init__.py
+- app/schemas/__init__.py
+- app/api/__init__.py
+- app/api/routes/__init__.py
+- app/services/__init__.py
+
+They can be empty. Some projects put imports here for convenience, but empty works fine.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FLOW SUMMARY: What happens when you POST /auth/register
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Client sends: POST /auth/register with {"email": "alice@x.com", "password": "pass123"}
+
+2. FastAPI reads the JSON body and VALIDATES it against UserRegister schema
+   - Checks email is valid format → if not, return 422
+   - Checks password length >= 8 → if not, return 422
+
+3. FastAPI calls get_db() dependency
+   - SessionLocal() creates a DB session
+   - Yields it to the route handler
+
+4. register() function runs with user_data and db
+   - Checks if email exists in DB
+   - If yes → raise 400
+   - Calls hash_password() to bcrypt the password
+   - Creates User() ORM object
+   - db.add() + db.commit() inserts to Postgres
+   - db.refresh() gets the auto-generated id and created_at
+
+5. register() returns new_user (a SQLAlchemy User object)
+
+6. FastAPI SERIALIZES the response through UserResponse schema
+   - Only includes: id, email, is_active, created_at
+   - Strips out: hashed_password
+   - Converts to JSON
+
+7. FastAPI returns HTTP 201 with JSON body
+
+8. After route completes, finally: db.close() closes the DB session
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FLOW SUMMARY: What happens when you GET /auth/me with a token
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Client sends: GET /auth/me
+   Headers: Authorization: Bearer eyJ0eXAi...
+
+2. FastAPI extracts the token from the Authorization header (oauth2_scheme does this)
+
+3. FastAPI calls get_current_user() dependency
+   - Calls jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+     → verifies signature
+     → checks expiry
+     → returns {"sub": "alice@x.com"}
+   - Extracts email from payload
+   - Queries DB for user by email
+   - Returns User object if found and is_active=True
+   - Otherwise raises 401 (token invalid/expired, user not found, user disabled)
+
+4. get_me() function runs with current_user (the User object from above)
+   - If we got here, the token is valid and the user exists
+
+5. Return current_user
+
+6. FastAPI SERIALIZES through UserResponse schema
+
+7. FastAPI returns HTTP 200 with user JSON
+
+
+These flows happen EVERY request. The dependency system handles auth automatically.
