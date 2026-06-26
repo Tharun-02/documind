@@ -1,10 +1,13 @@
+# main.py
+# UPDATED for Day 3: include documents router
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import create_tables
-from app.api.routes import auth
+from app.api.routes import auth, documents  # NEW: import documents
 
 
 @asynccontextmanager
@@ -58,10 +61,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# ── Routers ─────────────────────────────────────────────────────────────
+
 app.include_router(
     auth.router,
     prefix="/auth",
     tags=["Authentication"],
+)
+
+# NEW: include documents router at /documents prefix
+app.include_router(
+    documents.router,
+    prefix="/documents",
+    tags=["Documents"],
 )
 
 
