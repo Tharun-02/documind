@@ -1,5 +1,5 @@
 # main.py
-# UPDATED for Day 3: include documents router
+# UPDATED for Day 4: include query router
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import create_tables
-from app.api.routes import auth, documents  # NEW: import documents
+from app.api.routes import auth, documents, query  # NEW: import query
 
 
 @asynccontextmanager
@@ -69,11 +69,17 @@ app.include_router(
     tags=["Authentication"],
 )
 
-# NEW: include documents router at /documents prefix
 app.include_router(
     documents.router,
     prefix="/documents",
     tags=["Documents"],
+)
+
+# NEW: include query router at /query prefix
+app.include_router(
+    query.router,
+    prefix="/query",
+    tags=["Query & Retrieval"],
 )
 
 

@@ -28,8 +28,8 @@ def register(
             detail="Email already registered",
         )
 
-    print("Password:", user_data.password)
-    print("Length:", len(user_data.password))
+    # print("Password:", user_data.password)
+    # print("Length:", len(user_data.password))
     hashed = hash_password(user_data.password)
 
     new_user = User(
