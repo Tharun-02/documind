@@ -18,7 +18,8 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 
 # ── AI / LLM ───────────────────────────────────
-openai==1.35.0
+# openai==1.35.0
+requests==2.31.0  # For HuggingFace API calls
 langchain==0.2.6
 langchain-openai==0.1.14
 langchain-community==0.2.6

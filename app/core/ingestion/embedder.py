@@ -1,128 +1,317 @@
 # app/core/ingestion/embedder.py
+# UPDATED for Day 4.5: Replace OpenAI with HuggingFace (FREE)
 #
-# WHY THIS FILE EXISTS:
-# Takes text chunks (from Day 3) and converts them to embeddings via OpenAI API.
-# Embeddings are vectors (1536 numbers) that represent meaning.
-# Stores vectors in Pinecone (vector database) with metadata.
+# This version supports multiple embedding providers:
+# - HuggingFace Inference API (RECOMMENDED - FREE)
+# - Cohere (Alternative - LIMITED FREE)
+# - Google Generative AI (Alternative - FREE)
 #
-# PIPELINE:
-# chunks in Postgres → embed with OpenAI → store in Pinecone → ready for search
+# Key difference from Day 4:
+# - No OpenAI dependency (saves money)
+# - Uses sentence-transformers via HuggingFace (free 30K/month)
+# - Returns 384-dimensional vectors (vs OpenAI's 1536)
+# - Same interface so retriever.py needs NO changes
 
 from typing import List, Dict, Any
-import time
-from openai import OpenAI
+import requests
 from app.config import settings
 
 
 class EmbeddingService:
     """
-    Embeds text using OpenAI's text-embedding-3-small model.
+    Embeds text using FREE alternatives to OpenAI.
     
-    Why text-embedding-3-small?
-    - Fast (milliseconds per chunk)
-    - Cheap ($0.02 per 1M tokens)
-    - Good quality (1536 dimensions)
-    - Industry standard for RAG
-    
-    Alternatives:
-    - text-embedding-3-large: better quality but slower/expensive
-    - Local models (HuggingFace): free but slower on CPU
+    Supports:
+      1. HuggingFace Inference API (RECOMMENDED)
+         - 30K requests/month free
+         - sentence-transformers/all-MiniLM-L6-v2 (384 dims)
+         - No credit card needed
+      
+      2. Cohere Embeddings (ALTERNATIVE)
+         - Limited free tier
+         - 4096 dimensions (high quality)
+      
+      3. Google Generative AI (ALTERNATIVE)
+         - Free tier available
+         - Requires billing account
     """
 
     def __init__(self):
-        # Initialize OpenAI client with API key from .env
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "text-embedding-3-small"
+        provider = getattr(settings, 'EMBEDDING_PROVIDER', 'huggingface')
+        
+        if provider == 'huggingface':
+            self.api_key = settings.HUGGINGFACE_API_KEY
+            self.model = getattr(settings, 'HUGGINGFACE_MODEL', 
+                               'sentence-transformers/all-MiniLM-L6-v2')
+            self.provider = 'huggingface'
+            
+        elif provider == 'cohere':
+            self.api_key = settings.COHERE_API_KEY
+            self.provider = 'cohere'
+            
+        elif provider == 'google':
+            self.api_key = settings.GOOGLE_API_KEY
+            self.provider = 'google'
+        else:
+            raise ValueError(f"Unknown embedding provider: {provider}")
 
     def embed_text(self, text: str) -> List[float]:
         """
         Embed a single text string.
         
         Args:
-            text: the text to embed (a chunk, a question, etc.)
+            text: text to embed (a chunk or question)
         
         Returns:
-            List of 1536 floats representing the embedding
+            List of floats (embedding vector)
         
         Example:
             embedder = EmbeddingService()
-            vec = embedder.embed_text("The contract expires on December 31st")
-            # vec = [0.123, -0.456, 0.789, ..., 0.234]  (1536 numbers)
+            vec = embedder.embed_text("The contract expires December 31st")
+            # Returns: [0.123, -0.456, ..., 0.234]  (384 floats if HuggingFace)
         """
 
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=text,
-                dimensions=1536,  # standard for this model
-            )
-
-            # response.data[0].embedding is the vector (List of floats)
-            embedding = response.data[0].embedding
-
-            return embedding
-
-        except Exception as e:
-            raise ValueError(f"Failed to embed text: {str(e)}")
+        if self.provider == 'huggingface':
+            return self._embed_huggingface(text)
+        elif self.provider == 'cohere':
+            return self._embed_cohere(text)
+        elif self.provider == 'google':
+            return self._embed_google(text)
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """
-        Embed multiple texts efficiently.
-        OpenAI API accepts batches, which is cheaper than individual calls.
+        Embed multiple texts efficiently (cheaper than individual calls).
         
         Args:
             texts: list of strings to embed
         
         Returns:
-            List of embeddings (each is a list of 1536 floats)
-        
-        Example:
-            texts = ["chunk 1...", "chunk 2...", "chunk 3..."]
-            embeddings = embedder.embed_batch(texts)
-            # embeddings = [[0.1, 0.2, ...], [0.3, 0.4, ...], ...]
+            List of embeddings
         """
 
         if not texts:
             return []
 
+        if self.provider == 'huggingface':
+            return self._embed_batch_huggingface(texts)
+        elif self.provider == 'cohere':
+            return self._embed_batch_cohere(texts)
+        elif self.provider == 'google':
+            return self._embed_batch_google(texts)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # HUGGINGFACE IMPLEMENTATION (RECOMMENDED)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _embed_huggingface(self, text: str) -> List[float]:
+        """
+        Embed using HuggingFace Inference API.
+        
+        Why HuggingFace?
+        - 30,000 requests/month FREE
+        - No credit card needed
+        - Fast (milliseconds)
+        - Good quality (sentence-transformers)
+        - 384 dimensions (smaller than OpenAI's 1536)
+        """
+
         try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=texts,  # OpenAI batches multiple texts
-                dimensions=1536,
+            url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model}"
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+            }
+
+            payload = {
+                "inputs": text,
+            }
+
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=30,
             )
 
-            # response.data is a list of Embedding objects
-            # Each has an embedding attribute
-            embeddings = [item.embedding for item in response.data]
+            if response.status_code != 200:
+                raise ValueError(
+                    f"HuggingFace API error {response.status_code}: {response.text}"
+                )
 
+            embedding = response.json()
+
+            # HuggingFace returns either a list or list of lists
+            # For single text, extract the first element
+            if isinstance(embedding[0], list):
+                embedding = embedding[0]
+
+            return embedding
+
+        except Exception as e:
+            raise ValueError(f"Failed to embed text with HuggingFace: {str(e)}")
+
+    def _embed_batch_huggingface(self, texts: List[str]) -> List[List[float]]:
+        """
+        Embed multiple texts using HuggingFace batch endpoint.
+        More efficient than individual calls.
+        """
+
+        try:
+            url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model}"
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+            }
+
+            payload = {
+                "inputs": texts,
+            }
+
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=60,  # Batch might take longer
+            )
+
+            if response.status_code != 200:
+                raise ValueError(
+                    f"HuggingFace API error {response.status_code}: {response.text}"
+                )
+
+            embeddings = response.json()
             return embeddings
 
         except Exception as e:
-            raise ValueError(f"Failed to embed batch: {str(e)}")
+            raise ValueError(f"Failed to embed batch with HuggingFace: {str(e)}")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # COHERE IMPLEMENTATION (ALTERNATIVE)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _embed_cohere(self, text: str) -> List[float]:
+        """
+        Embed using Cohere API (alternative to HuggingFace).
+        
+        Pros:
+          - High quality (4096 dimensions)
+          - Professional grade
+          
+        Cons:
+          - Limited free tier (~1000 embeddings/month)
+          - Requires API key setup
+        """
+
+        try:
+            import cohere
+            
+            client = cohere.Client(api_key=self.api_key)
+            
+            response = client.embed(
+                texts=[text],
+                model="embed-english-v3.0",
+                input_type="search_document",
+            )
+
+            return response.embeddings[0]
+
+        except ImportError:
+            raise ImportError("Install cohere: pip install cohere")
+        except Exception as e:
+            raise ValueError(f"Failed to embed with Cohere: {str(e)}")
+
+    def _embed_batch_cohere(self, texts: List[str]) -> List[List[float]]:
+        """Batch embedding with Cohere."""
+
+        try:
+            import cohere
+            
+            client = cohere.Client(api_key=self.api_key)
+            
+            response = client.embed(
+                texts=texts,
+                model="embed-english-v3.0",
+                input_type="search_document",
+            )
+
+            return response.embeddings
+
+        except ImportError:
+            raise ImportError("Install cohere: pip install cohere")
+        except Exception as e:
+            raise ValueError(f"Failed to embed batch with Cohere: {str(e)}")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # GOOGLE IMPLEMENTATION (ALTERNATIVE)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _embed_google(self, text: str) -> List[float]:
+        """
+        Embed using Google Generative AI (alternative).
+        
+        Pros:
+          - Free tier available
+          - Good quality
+          
+        Cons:
+          - Requires billing account
+          - Slightly slower
+        """
+
+        try:
+            import google.generativeai as genai
+            
+            genai.configure(api_key=self.api_key)
+            
+            result = genai.embed_content(
+                model="models/embedding-001",
+                content=text,
+            )
+
+            return result["embedding"]
+
+        except ImportError:
+            raise ImportError("Install google-generativeai: pip install google-generativeai")
+        except Exception as e:
+            raise ValueError(f"Failed to embed with Google: {str(e)}")
+
+    def _embed_batch_google(self, texts: List[str]) -> List[List[float]]:
+        """Batch embedding with Google."""
+
+        try:
+            import google.generativeai as genai
+            
+            genai.configure(api_key=self.api_key)
+            
+            embeddings = []
+            for text in texts:
+                result = genai.embed_content(
+                    model="models/embedding-001",
+                    content=text,
+                )
+                embeddings.append(result["embedding"])
+
+            return embeddings
+
+        except ImportError:
+            raise ImportError("Install google-generativeai: pip install google-generativeai")
+        except Exception as e:
+            raise ValueError(f"Failed to embed batch with Google: {str(e)}")
 
 
 class PineconeService:
     """
-    Stores embeddings in Pinecone vector database.
-    Pinecone is a managed vector DB that:
-    - Stores high-dimensional vectors
-    - Provides ultra-fast similarity search
-    - Handles scaling automatically
-    - Stores metadata alongside vectors
+    Stores embeddings in Pinecone (unchanged from Day 4).
+    Works with ANY embedding dimension (384, 768, 1536, etc).
     """
 
     def __init__(self):
-        # Import Pinecone at method level to avoid hard dependency
         try:
             from pinecone import Pinecone
         except ImportError:
             raise ImportError("Install pinecone: pip install pinecone-client")
 
         self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-
-        # Connect to the index (pre-created via Pinecone web UI)
-        # Index name must be created in Pinecone before running this
         self.index = self.pc.Index(settings.PINECONE_INDEX_NAME)
 
     def upsert_chunks(
@@ -165,15 +354,9 @@ class PineconeService:
                 embedding = item["embedding"]
                 metadata = item["metadata"]
 
-                # Pinecone expects: (id, vector, metadata)
                 vectors_to_upsert.append((vector_id, embedding, metadata))
 
-            # Upsert to Pinecone (batch operation)
-            # Pinecone handles the actual indexing/search setup
-            upsert_response = self.index.upsert(
-                vectors=vectors_to_upsert,
-                # namespace=... (optional, for multi-tenant)
-            )
+            upsert_response = self.index.upsert(vectors=vectors_to_upsert)
 
             return {
                 "upserted_count": len(vectors_to_upsert),
@@ -222,12 +405,11 @@ class PineconeService:
                 include_metadata=True,
             )
 
-            # Format results for easier use
             formatted_results = []
             for match in results.matches:
                 formatted_results.append({
                     "id": match.id,
-                    "score": match.score,  # 0-1, higher is better
+                    "score": match.score,
                     "metadata": match.metadata,
                 })
 
@@ -235,7 +417,7 @@ class PineconeService:
 
         except Exception as e:
             raise ValueError(f"Failed to search Pinecone: {str(e)}")
-
+        
     def delete_by_document_id(self, document_id: int) -> Dict[str, Any]:
         """
         Delete all vectors for a document (when user deletes a document).

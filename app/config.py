@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     # ── OpenAI ─────────────────────────────────
     OPENAI_API_KEY: str = ""
 
+    # Groq API Key (FREE, no credit card needed)
+    # Get from: https://console.groq.com/keys
+    GROQ_API_KEY: str = ""
+    # Groq Model (don't change - mixtral is best free model)
+    GROQ_MODEL: str = ""
+
+    # Optional: Ollama (if using local LLM instead of Groq)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "mistral"
+
+    # Embedding Provider (from Day 4.5)
+    EMBEDDING_PROVIDER: str = ""
+    HUGGINGFACE_API_KEY: str = ""
+    HUGGINGFACE_MODEL: str= ""
+
     # ── Pinecone ───────────────────────────────
     PINECONE_API_KEY: str = ""
     PINECONE_INDEX_NAME: str = "documind"
