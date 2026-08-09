@@ -20,7 +20,7 @@ class LLMService:
 
     def __init__(self):
         self.api_key = settings.GROQ_API_KEY
-        self.model = "mixtral-8x7b-32768"  # Best free model
+        self.model = "llama-3.3-70b-versatile"  # Best free model w/ reliable tool-calling (Day 6)
         self.base_url = "https://api.groq.com/openai/v1"
 
     def generate_answer(

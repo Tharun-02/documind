@@ -21,6 +21,7 @@ bcrypt==4.0.1
 # openai==1.35.0
 requests==2.31.0  # For HuggingFace API calls
 langchain==0.2.6
+langchain-groq==0.2.0  # Day 6: ChatGroq wrapper for the agent
 langchain-openai==0.1.14
 langchain-community==0.2.6
 langgraph==0.1.19

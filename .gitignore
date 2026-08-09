@@ -32,3 +32,6 @@ Thumbs.db
 .coverage
 htmlcov/
 workers/
+
+# Plans (local-only working docs — never committed)
+docs/plans/

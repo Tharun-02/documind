@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # Groq API Key (FREE, no credit card needed)
     # Get from: https://console.groq.com/keys
     GROQ_API_KEY: str = ""
-    # Groq Model (don't change - mixtral is best free model)
-    GROQ_MODEL: str = ""
+    # Groq Model (Day 6: switched to llama-3.3-70b-versatile for reliable tool-calling)
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # Optional: Ollama (if using local LLM instead of Groq)
     OLLAMA_BASE_URL: str = "http://localhost:11434"

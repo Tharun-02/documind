@@ -1,32 +1,25 @@
 # app/api/routes/query.py
 #
 # WHY THIS FILE EXISTS:
-# The POST /query endpoint - where users ask questions about their documents.
-# This is where Days 1-4 come together:
+# Query endpoints — where users ask questions about their documents.
+# This is where Days 1-6 come together:
 #   Day 1: Docker provides infrastructure
 #   Day 2: JWT authenticates the user
 #   Day 3: Chunks from parsed PDFs
 #   Day 4: Retrieve relevant chunks via semantic search
+#   Day 5: Full RAG via Groq LLM
+#   Day 6: LangGraph agent for multi-step reasoning + tool routing
 #
-# FLOW:
-# User POST /query with question + JWT
-#   ↓
-# Verify JWT (get current_user)
-#   ↓
-# Embed question with OpenAI API
-#   ↓
-# Search Pinecone for similar chunks
-#   ↓
-# Enrich results with full text from Postgres
-#   ↓
-# Verify user owns these documents (security)
-#   ↓
-# Return chunks to user
+# ENDPOINTS:
+#   POST /query         → linear retrieval (chunks only, no LLM)
+#   POST /query/agent   → LangGraph agent (decides which tools to call)
+#   GET  /query/status  → debug info for the current user
 
 import time
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -36,6 +29,7 @@ from app.dependencies import get_current_user
 from app.schemas.query import QueryRequest, QueryResponse, RetrievedChunk
 from app.core.ingestion.embedder import EmbeddingService, PineconeService
 from app.core.retrieval.retriever import RetrieverService
+from app.services.agent_service import AgentService
 
 
 router = APIRouter()
@@ -232,6 +226,75 @@ def query_documents(
     )
 
     return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT ENDPOINT (Day 6: LangGraph agent)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AgentRequest(BaseModel):
+    """Request body for POST /query/agent."""
+    question: str = Field(..., min_length=3, max_length=1000)
+    document_ids: Optional[List[int]] = Field(
+        None, description="Optional filter to specific documents"
+    )
+    top_k: Optional[int] = Field(
+        5, ge=1, le=20, description="Chunks to retrieve per search"
+    )
+
+
+class AgentSource(BaseModel):
+    document_id: int
+    filename: Optional[str] = None
+    score: Optional[float] = None
+    page_number: Optional[int] = None
+
+
+class AgentStepResponse(BaseModel):
+    tool: str
+    input: str
+    output_summary: str
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    sources: List[AgentSource] = []
+    steps: List[AgentStepResponse] = []
+    response_time_ms: float
+
+
+@router.post(
+    "/agent",
+    response_model=AgentResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Query & Retrieval"],
+)
+async def query_agent(
+    request: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ask a question via the LangGraph agent.
+
+    Unlike the linear /query and /answer endpoints, the agent decides:
+    - Whether to retrieve at all (skips for greetings, etc.)
+    - Which tool(s) to call (retrieve_documents, answer_question)
+    - When to stop
+
+    The response includes a `steps` trace showing what the agent did.
+    Empty steps = no tools were called (e.g., for "hi").
+
+    Requires: valid JWT token.
+    """
+    service = AgentService(db)
+    result = await service.run(
+        question=request.question,
+        user_id=current_user.id,
+        document_ids=request.document_ids,
+        top_k=request.top_k,
+    )
+    return AgentResponse(**result.to_dict())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
