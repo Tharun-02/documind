@@ -37,6 +37,22 @@ def fake_db():
     return MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def reset_request_state():
+    """
+    Clean _request_state before EACH test.
+
+    _request_state is a module-level dict in app.core.agent.tools that holds
+    per-request data (db session, user_id, last_retrieval). Without this
+    fixture, state leaks between tests — Test 2 (greeting) would see leftover
+    retrieval data from Test 5 and fail.
+    """
+    from app.core.agent.tools import _request_state
+    _request_state.clear()
+    yield
+    _request_state.clear()
+
+
 @pytest.fixture
 def fake_chunks():
     """Sample retrieval output — what RetrieverService.retrieve() returns."""
@@ -137,6 +153,13 @@ async def test_agent_service_returns_agent_result(fake_db, fake_chunks):
          patch("app.core.agent.tools.RetrieverService") as MockRetriever:
         MockRetriever.return_value.retrieve.return_value = fake_chunks
 
+        # FIX (Option B): the real `retrieve_documents` tool would set
+        # `_request_state["last_retrieval"]` after calling the retriever.
+        # Since we mock the agent entirely (skipping the tool), we pre-populate
+        # that state so AgentService can read it for sources.
+        from app.core.agent.tools import _request_state
+        _request_state["last_retrieval"] = fake_chunks
+
         service = AgentService(fake_db)
         result = await service.run(
             question="When does the contract expire?",
@@ -150,7 +173,7 @@ async def test_agent_service_returns_agent_result(fake_db, fake_chunks):
     assert len(result.steps) == 2
     assert result.steps[0].tool == "retrieve_documents"
     assert result.steps[1].tool == "answer_question"
-    assert result.response_time_ms > 0
+    assert result.response_time_ms >= 0  # Fast mocked agent → can be 0; real agent > 0
     # Sources should be populated from the retrieval step
     assert len(result.sources) >= 1
     assert result.sources[0]["filename"] == "contract.pdf"
@@ -221,6 +244,11 @@ async def test_sources_are_deduplicated(fake_db):
     with patch("app.services.agent_service.build_agent", return_value=fake_agent), \
          patch("app.core.agent.tools.RetrieverService") as MockRetriever:
         MockRetriever.return_value.retrieve.return_value = dup_chunks
+
+        # FIX (Option B): same as above — pre-populate _request_state
+        # because the mocked agent skips the real tool's side effects.
+        from app.core.agent.tools import _request_state
+        _request_state["last_retrieval"] = dup_chunks
 
         service = AgentService(fake_db)
         result = await service.run(question="test", user_id=1)

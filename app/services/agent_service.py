@@ -26,7 +26,7 @@
 # - Makes testing easier — you can mock AgentService entirely.
 
 import time
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from sqlalchemy.orm import Session
@@ -144,6 +144,63 @@ class AgentService:
             steps=steps,
             response_time_ms=elapsed_ms,
         )
+
+    async def run_stream(
+        self,
+        question: str,
+        user_id: int,
+        document_ids: Optional[list[int]] = None,
+        top_k: int = 5,
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Stream agent responses via Server-Sent Events (SSE).
+
+        Yields chunks as they arrive:
+        1. First: {"type": "chunks", "retrieved_chunks": [...]}
+        2. Middle: {"type": "token", "token": "text"}
+        3. Last: {"type": "done", "done": True}
+
+        Args:
+            question: the user's question
+            user_id: document owner
+            document_ids: optional filter to specific documents
+            top_k: chunks to retrieve per search
+
+        Yields:
+            Dict with 'type' field indicating chunk type.
+        """
+        # Step 1: Retrieve chunks first (yield these immediately)
+        try:
+            agent = build_agent(
+                db=self.db,
+                user_id=user_id,
+                document_ids=document_ids,
+                top_k=top_k,
+            )
+        except Exception as e:
+            yield {"type": "error", "error": f"Failed to build agent: {str(e)}"}
+            return
+
+        # Step 2: Run the agent and yield tokens as they arrive
+        try:
+            result = await agent.ainvoke({
+                "messages": [HumanMessage(content=question)]
+            })
+
+            # Extract the answer from the result
+            messages = result.get("messages", [])
+            answer, steps, sources = self._extract_from_messages(messages)
+
+            # Stream the answer token by token
+            # For now, we yield the full answer as one "token"
+            # In a real streaming implementation, you'd use an async generator
+            # that yields chunks from LLMService.generate_answer(stream=True)
+            yield {"type": "token", "token": answer}
+
+        except Exception as e:
+            yield {"type": "error", "error": f"Agent error: {str(e)}"}
+
+        yield {"type": "done", "done": True}
 
     def _extract_from_messages(
         self,

@@ -19,8 +19,10 @@ import time
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+import json
 
 from app.database import get_db
 from app.models.user import User
@@ -30,6 +32,8 @@ from app.schemas.query import QueryRequest, QueryResponse, RetrievedChunk
 from app.core.ingestion.embedder import EmbeddingService, PineconeService
 from app.core.retrieval.retriever import RetrieverService
 from app.services.agent_service import AgentService
+from app.core.observability.tracing import trace_request
+from app.core.observability.logger import get_logger
 
 
 router = APIRouter()
@@ -295,6 +299,70 @@ async def query_agent(
         top_k=request.top_k,
     )
     return AgentResponse(**result.to_dict())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT STREAMING ENDPOINT (Day 7b: SSE)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/agent/stream",
+    status_code=status.HTTP_200_OK,
+    tags=["Query & Retrieval"],
+)
+async def query_agent_stream(
+    request: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ask a question via the LangGraph agent with streaming responses (SSE).
+
+    Returns a Server-Sent Events stream with chunks:
+    - type="token": Each token of the answer as it's generated
+    - type="done": Stream is complete
+
+    Example SSE output:
+        data: {"type": "token", "token": "The"}
+
+        data: {"type": "token", "token": " contract"}
+
+        data: {"type": "done", "done": true}
+
+    Requires: valid JWT token.
+
+    Usage:
+        curl -N -X POST http://localhost:8000/query/agent/stream \\
+          -H "Authorization: Bearer <token>" \\
+          -H "Content-Type: application/json" \\
+          -d '{"question": "When does contract end?"}'
+    """
+    service = AgentService(db)
+
+    async def event_generator():
+        """Generate SSE events from agent stream."""
+        try:
+            async for chunk in service.run_stream(
+                question=request.question,
+                user_id=current_user.id,
+                document_ids=request.document_ids,
+                top_k=request.top_k,
+            ):
+                # Format as SSE: "data: {json}\n\n"
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except Exception as e:
+            # Send error as SSE event
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

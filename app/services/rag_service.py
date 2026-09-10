@@ -1,32 +1,45 @@
 # app/services/rag_service.py
 # Day 5: Orchestrate Retrieval + Generation
+# Day 7: Added Redis caching via RAGCacheService
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.core.retrieval.retriever import RetrieverService
 from app.core.generation.llm_service import LLMService
+from app.core.cache.cache_service import RAGCacheService
+from app.config import settings
 import time
 
 
 class RAGService:
     """
     Complete RAG (Retrieval-Augmented Generation) pipeline.
-    
+
     Flow:
     1. User asks question
-    2. Retrieve relevant chunks (via RetrieverService)
-    3. Format chunks as context
-    4. Pass to LLM with context
-    5. LLM generates answer
-    6. Return answer with sources
+    2. Check Redis cache (Day 7)
+    3. If cache miss: Retrieve relevant chunks (via RetrieverService)
+    4. Format chunks as context
+    5. Pass to LLM with context
+    6. LLM generates answer
+    7. Cache result (Day 7)
+    8. Return answer with sources
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, cache_service: RAGCacheService = None):
+        """
+        Initialize RAGService with optional cache.
+
+        Args:
+            db: SQLAlchemy session.
+            cache_service: RAGCacheService instance. If None, caching is disabled.
+        """
         self.retriever = RetrieverService(db)
         self.llm = LLMService()
         self.db = db
+        self.cache = cache_service
 
-    def answer_question(
+    async def answer_question(
         self,
         question: str,
         user_id: int,
@@ -35,16 +48,31 @@ class RAGService:
     ) -> Dict[str, Any]:
         """
         Generate answer to a question using RAG.
-        
+
+        Day 7: Added Redis caching to skip expensive Pinecone + Groq calls
+        on repeated queries.
+
         Returns:
         {
             "question": "When does contract end?",
             "answer": "Based on the documents, it expires December 31st...",
             "retrieved_chunks": [...],
             "response_time_ms": 5234,
-            "sources": [{"document_id": 1, "filename": "contract.pdf", ...}]
+            "sources": [{"document_id": 1, "filename": "contract.pdf", ...}],
+            "from_cache": False  # Day 7: indicates if result was cached
         }
         """
+        # Day 7: Check cache first
+        if self.cache:
+            cached_result = await self.cache.get_result(
+                user_id=user_id,
+                question=question,
+                document_ids=document_ids,
+                top_k=top_k,
+            )
+            if cached_result:
+                cached_result["from_cache"] = True
+                return cached_result
 
         start_time = time.time()
 
@@ -57,13 +85,18 @@ class RAGService:
         )
 
         if not retrieved_chunks:
-            return {
+            result = {
                 "question": question,
                 "answer": "No relevant documents found for your question.",
                 "retrieved_chunks": [],
                 "response_time_ms": (time.time() - start_time) * 1000,
                 "sources": [],
+                "from_cache": False,
             }
+            # Day 7: Cache empty results too (shorter TTL)
+            if self.cache:
+                await self.cache.set_result(result, user_id, question, document_ids, top_k, ttl=300)
+            return result
 
         # Step 2: Generate answer using LLM
         try:
@@ -80,14 +113,21 @@ class RAGService:
 
         elapsed_ms = (time.time() - start_time) * 1000
 
-        return {
+        result = {
             "question": question,
             "answer": answer,
             "retrieved_chunks": retrieved_chunks,
             "response_time_ms": elapsed_ms,
             "sources": sources,
             "chunk_count": len(retrieved_chunks),
+            "from_cache": False,
         }
+
+        # Day 7: Cache the result
+        if self.cache:
+            await self.cache.set_result(result, user_id, question, document_ids, top_k)
+
+        return result
 
     def answer_question_streaming(
         self,

@@ -15,6 +15,7 @@ venv/
 
 # Uploads (user files — not committed)
 uploads/
+resume/
 
 # DB
 *.db
@@ -34,4 +35,18 @@ htmlcov/
 workers/
 
 # Plans (local-only working docs — never committed)
+docs/
 docs/plans/
+docs/concepts/
+docs/LEARNINGS.md
+
+# Graphify
+graphify-out/
+
+# Tests
+tests/
+.pytest_cache/
+
+# Claude files
+CLAUDE.md
+.claude/

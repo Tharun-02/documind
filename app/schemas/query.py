@@ -146,3 +146,47 @@ class ErrorResponse(BaseModel):
     status_code: int = Field(
         description="HTTP status code"
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STREAMING SCHEMAS (Day 7b: Server-Sent Events)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class AgentStreamChunk(BaseModel):
+    """
+    A single chunk in the SSE stream for agent responses.
+
+    Types:
+    - "chunks": Initial retrieved chunks (before streaming answers)
+    - "token": A single token from the LLM stream
+    - "error": An error occurred
+    - "done": Stream completed
+    """
+
+    type: str = Field(
+        description="Type of chunk: 'chunks', 'token', 'error', or 'done'"
+    )
+
+    # For type="chunks"
+    retrieved_chunks: Optional[List[RetrievedChunk]] = Field(
+        None,
+        description="Initial retrieved chunks when stream starts"
+    )
+
+    # For type="token"
+    token: Optional[str] = Field(
+        None,
+        description="Next token from LLM stream"
+    )
+
+    # For type="error"
+    error: Optional[str] = Field(
+        None,
+        description="Error message if type='error'"
+    )
+
+    # For type="done"
+    done: Optional[bool] = Field(
+        None,
+        description="True when stream is complete"
+    )
