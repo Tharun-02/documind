@@ -43,6 +43,8 @@ from app.config import settings
 from app.core.ingestion.parser import PDFParser
 from app.core.ingestion.chunker import DocumentChunker
 from app.schemas.document import DocumentResponse, DocumentListResponse
+from app.schemas.compare import CompareRequest, CompareResponse, ClauseComparison
+from app.services.compare_service import CompareService
 
 
 router = APIRouter()
@@ -365,3 +367,69 @@ def delete_document(
             pass
 
     # 204 No Content — successful deletion, no body to return
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CLAUSE COMPARISON ENDPOINT (Day 8)
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/compare",
+    response_model=CompareResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Documents"],
+)
+def compare_documents(
+    request: CompareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Compare clauses across two documents for similarity.
+
+    Finds clauses that are semantically similar (above threshold) between
+    two documents. Useful for finding duplicate terms, different wording
+    for same concepts, etc.
+
+    Requires: valid JWT token. Documents must belong to the current user.
+
+    Example:
+        curl -X POST http://localhost:8000/documents/compare \\
+          -H "Authorization: Bearer <token>" \\
+          -H "Content-Type: application/json" \\
+          -d '{
+            "document_id_1": 1,
+            "document_id_2": 2,
+            "threshold": 0.7
+          }'
+
+    Returns:
+        {
+            "document_1_id": 1,
+            "document_2_id": 2,
+            "document_1_filename": "contract.pdf",
+            "document_2_filename": "agreement.pdf",
+            "total_comparisons": 250,
+            "similar_clauses": [
+                {
+                    "clause_1": "...",
+                    "clause_2": "...",
+                    "similarity_score": 0.92,
+                    "document_1_page": 5,
+                    "document_2_page": 3
+                },
+                ...
+            ],
+            "comparison_time_ms": 1234.5
+        }
+    """
+    service = CompareService(db)
+
+    result = service.compare_documents(
+        document_id_1=request.document_id_1,
+        document_id_2=request.document_id_2,
+        user_id=current_user.id,
+        threshold=request.threshold,
+    )
+
+    return CompareResponse(**result)

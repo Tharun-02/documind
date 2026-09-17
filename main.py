@@ -6,12 +6,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.database import create_tables
 from app.api.routes import auth, documents, query, answer
 from app.core.observability.tracing import setup_langsmith
 from app.core.observability.logger import get_logger, set_request_context, clear_request_context
 import uuid
+import os
 
 
 # ── Lifespan (startup/shutdown) ─────────────────────────────────────────
@@ -22,6 +24,9 @@ async def lifespan(app: FastAPI):
     """
     # Startup: initialize LangSmith tracing
     setup_langsmith()
+
+    # Create database tables
+    create_tables()
 
     # Log startup
     logger = get_logger(__name__)
@@ -62,20 +67,38 @@ app.add_middleware(
 )
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger = get_logger(__name__)
-    logger.error(
-        f"Global exception handler caught: {type(exc).__name__}",
-        extra={"request_id": getattr(request.state, "request_id", "unknown"), "error": str(exc)}
-    )
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error",
-            "type": type(exc).__name__,
-        },
-    )
+# ── Routers ─────────────────────────────────────────────────────────────
+app.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["Authentication"],
+)
+
+app.include_router(
+    documents.router,
+    prefix="/documents",
+    tags=["Documents"],
+)
+
+# NEW: include query router at /query prefix
+app.include_router(
+    query.router,
+    prefix="/query",
+    tags=["Query & Retrieval"],
+)
+
+# Day 6 fix: mount /answer router (existed but was never included)
+app.include_router(
+    answer.router,
+    prefix="/answer",
+    tags=["Answer Generation"],
+)
+
+
+# ── Health Check ─────────────────────────────────────────────────────────
+@app.get("/health", tags=["System"])
+async def health_check():
+    return {"status": "ok", "service": "documind"}
 
 
 # ── Request Context Middleware ──────────────────────────────────────────
@@ -110,44 +133,24 @@ async def request_context_middleware(request: Request, call_next):
         clear_request_context()
 
 
-# ── Routers ─────────────────────────────────────────────────────────────
-
-app.include_router(
-    auth.router,
-    prefix="/auth",
-    tags=["Authentication"],
-)
-
-app.include_router(
-    documents.router,
-    prefix="/documents",
-    tags=["Documents"],
-)
-
-# NEW: include query router at /query prefix
-app.include_router(
-    query.router,
-    prefix="/query",
-    tags=["Query & Retrieval"],
-)
-
-# Day 6 fix: mount /answer router (existed but was never included)
-app.include_router(
-    answer.router,
-    prefix="/answer",
-    tags=["Answer Generation"],
-)
+# ── Global Exception Handler ─────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger = get_logger(__name__)
+    logger.error(
+        f"Global exception handler caught: {type(exc).__name__}",
+        extra={"request_id": getattr(request.state, "request_id", "unknown"), "error": str(exc)}
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "type": type(exc).__name__,
+        },
+    )
 
 
-@app.get("/health", tags=["System"])
-async def health_check():
-    return {"status": "ok", "service": "documind"}
-
-
-@app.get("/", tags=["System"])
-async def root():
-    return {
-        "message": "DocuMind API",
-        "docs": "/docs",
-        "health": "/health",
-    }
+# Serve frontend static files (must be after API routes)
+frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

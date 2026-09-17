@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuMind - Document Intelligence</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>DocuMind</h1>
+        <nav>
+            <ul>
+                <li><a href="#" id="register-link">Register</a></li>
+                <li><a href="#" id="login-link">Login</a></li>
+                <li><a href="#" id="upload-link">Upload</a></li>
+                <li><a href="#" id="documents-link">Documents</a></li>
+                <li><a href="#" id="compare-link">Compare</a></li>
+                <li><a href="#" id="logout-link">Logout</a></li>
+            </ul>
+        </nav>
+
+        <div id="auth-section">
+            <h2>Register</h2>
+            <form id="register-form">
+                <div>
+                    <label for="reg-email">Email:</label>
+                    <input type="email" id="reg-email" required>
+                </div>
+                <div>
+                    <label for="reg-password">Password:</label>
+                    <input type="password" id="reg-password" required>
+                </div>
+                <button type="submit">Register</button>
+            </form>
+
+            <h2>Login</h2>
+            <form id="login-form">
+                <div>
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div>
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+
+        <div id="upload-section">
+            <h2>Upload Document</h2>
+            <form id="upload-form">
+                <div>
+                    <label for="upload-file">PDF File:</label>
+                    <input type="file" id="upload-file" accept=".pdf" required>
+                </div>
+                <button type="submit">Upload</button>
+            </form>
+            <div id="upload-result"></div>
+        </div>
+
+        <div id="documents-section">
+            <h2>My Documents</h2>
+            <button id="refresh-docs">Refresh List</button>
+            <ul id="documents-list"></ul>
+        </div>
+
+        <div id="compare-section">
+            <h2>Compare Documents</h2>
+            <form id="compare-form">
+                <div>
+                    <label for="doc1-select">Document 1:</label>
+                    <select id="doc1-select" required></select>
+                </div>
+                <div>
+                    <label for="doc2-select">Document 2:</label>
+                    <select id="doc2-select" required></select>
+                </div>
+                <div>
+                    <label for="threshold">Similarity Threshold (0-1):</label>
+                    <input type="number" id="threshold" min="0" max="1" step="0.1" value="0.7" required>
+                </div>
+                <button type="submit">Compare</button>
+            </form>
+            <div id="compare-result"></div>
+        </div>
+
+        <div id="api-status">
+            <h2>API Status</h2>
+            <p id="health-check">Checking...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

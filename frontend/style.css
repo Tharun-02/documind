@@ -1,0 +1,131 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+nav {
+    background-color: #333;
+    padding: 10px;
+}
+
+nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 15px;
+}
+
+nav ul li a {
+    color: white;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+
+nav ul li a:hover {
+    background-color: #555;
+}
+
+section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #fafafa;
+}
+
+section h2 {
+    margin-top: 0;
+    color: #333;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 500px;
+}
+
+form div {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input, select, button {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+#upload-result, #compare-result {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #e9f7ef;
+    border: 1px solid #27ae60;
+    border-radius: 3px;
+}
+
+#documents-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+#documents-list li {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#documents-list li:last-child {
+    border-bottom: none;
+}
+
+#api-status {
+    margin-top: 30px;
+    padding: 15px;
+    background-color: #e8f4fd;
+    border: 1px solid #3498db;
+    border-radius: 3px;
+}
+
+.hidden {
+    display: none;
+}
+
+.error {
+    color: #e74c3c;
+}
+
+.success {
+    color: #27ae60;
+}
