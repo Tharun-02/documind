@@ -2,6 +2,8 @@
 // Handles authentication, document upload, listing, and comparison
 
 // API base URL
+// For development, leave empty string (same origin)
+// For production, set to your deployed backend URL (e.g., 'https://your-backend.up.railway.app')
 const API_BASE = '';
 
 // Store token in localStorage
