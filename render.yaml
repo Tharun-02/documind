@@ -5,9 +5,12 @@ services:
     runtime: python
     plan: free
     buildCommand: |
+  # Set Rust and Cargo home to writable directories
+  export RUSTUP_HOME=$HOME/.rustup
+  export CARGO_HOME=$HOME/.cargo
   # Install Rust for building pydantic-core from source
   curl https://sh.rustup.rs -sSf | sh -s -- -y
-  export PATH="$HOME/.cargo/bin:$PATH"
+  export PATH="$RUSTUP_HOME/bin:$PATH"
   # Install Python dependencies
   pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
