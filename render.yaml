@@ -4,7 +4,12 @@ services:
     name: documind-api
     runtime: python
     plan: free
-    buildCommand: pip install --upgrade pip && pip install --only-binary :all: -r requirements.txt
+    buildCommand: |
+  # Install Rust for building pydantic-core from source
+  curl https://sh.rustup.rs -sSf | sh -s -- -y
+  export PATH="$HOME/.cargo/bin:$PATH"
+  # Install Python dependencies
+  pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
