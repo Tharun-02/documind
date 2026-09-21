@@ -41,9 +41,7 @@ services:
       - key: PINECONE_ENVIRONMENT
         value: us-east-1-aws
       - key: LANGCHAIN_TRACING_V2
-        value: "true"
-      - key: LANGCHAIN_API_KEY
-        sync: false
+        value: "false"
       - key: LANGCHAIN_PROJECT
         value: documind
       - key: UPLOAD_DIR
