@@ -55,11 +55,10 @@ services:
       - key: CORS_ORIGINS
         value: "https://documind-frontend.onrender.com"
 
-  # Frontend (Static Site)
+  # Frontend (Static Site) - static sites don't use "plan" field
   - type: web
     name: documind-frontend
     runtime: static
-    plan: free
     buildCommand: ""
     staticPublishPath: ./frontend
     routes:
@@ -73,7 +72,7 @@ services:
     name: documind-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: []  # Empty = allow all (required for free tier)
+    ipAllowList: []
 
 databases:
   - name: documind-db
