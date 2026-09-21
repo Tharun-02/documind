@@ -68,11 +68,12 @@ services:
         destination: /index.html
     autoDeploy: true
 
-  # Redis
+  # Redis (free tier requires ipAllowList)
   - type: redis
     name: documind-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []  # Empty = allow all (required for free tier)
 
 databases:
   - name: documind-db
