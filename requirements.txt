@@ -28,7 +28,7 @@ langgraph==0.1.19
 langsmith==0.1.83
 
 # ── Vector DB ──────────────────────────────────
-pinecone-client==4.1.2  # Using stable version to avoid build issues
+# pinecone-client==2.2.4  # Temporarily disabled due to build issues
 
 # ── Document Parsing ───────────────────────────
 PyPDF2==3.0.1
@@ -38,7 +38,7 @@ python-docx==1.1.0
 redis==5.0.7
 
 # ── Validation ─────────────────────────────────
-pydantic==2.7.4
+pydantic==2.7.3  # Downgraded to avoid pydantic-core build issues
 pydantic-settings==2.3.4
 
 # ── Rate Limiting ──────────────────────────────
