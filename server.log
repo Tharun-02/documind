@@ -1,9 +1,0 @@
-INFO:     Started server process [21024]
-INFO:     Waiting for application startup.
-{"timestamp": "2026-09-17 19:01:09,748", "level": "INFO", "logger": "app.core.observability.tracing", "message": "LangSmith tracing enabled", "module": "tracing", "function": "setup_langsmith", "line": 40, "request_id": "unknown", "user_id": "anonymous", "path": "/"}
-{"timestamp": "2026-09-17 19:01:09,753", "level": "INFO", "logger": "main", "message": "DocuMind API starting up", "module": "main", "function": "lifespan", "line": 33, "request_id": "unknown", "user_id": "anonymous", "path": "/"}
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:57851 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49937 - "POST /documents/compare HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51181 - "GET / HTTP/1.1" 200 OK
