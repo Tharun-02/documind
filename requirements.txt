@@ -28,7 +28,7 @@ langgraph==0.1.19
 langsmith==0.1.83
 
 # ── Vector DB ──────────────────────────────────
-pinecone-client==3.0.0  # Downgraded from 4.1.0 to avoid build issues
+pinecone-client==4.1.2  # Using stable version to avoid build issues
 
 # ── Document Parsing ───────────────────────────
 PyPDF2==3.0.1
