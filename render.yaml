@@ -68,14 +68,14 @@ services:
         destination: /index.html
     autoDeploy: true
 
+  # Redis
+  - type: redis
+    name: documind-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
 databases:
   - name: documind-db
     databaseName: documind
     user: documind
     plan: free
-
-services:
-  - type: redis
-    name: documind-redis
-    plan: free
-    maxmemoryPolicy: allkeys-lru
