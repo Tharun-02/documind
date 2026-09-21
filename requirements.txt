@@ -12,12 +12,12 @@ sqlalchemy==2.0.31
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
-# ── Auth ───────────────────────────────────────
+# ── Auth ───────────────────────────────────
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 
-# ── AI / LLM ───────────────────────────────────
+# ── AI / LLM ───────────────────────────────────────────────
 # openai==1.35.0
 requests==2.31.0  # For HuggingFace API calls
 langchain==0.2.6
@@ -28,7 +28,7 @@ langgraph==0.1.19
 langsmith==0.1.83
 
 # ── Vector DB ──────────────────────────────────
-pinecone-client==4.1.0
+pinecone-client==3.0.0  # Downgraded from 4.1.0 to avoid build issues
 
 # ── Document Parsing ───────────────────────────
 PyPDF2==3.0.1
