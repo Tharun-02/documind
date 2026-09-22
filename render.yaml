@@ -7,14 +7,8 @@ services:
     buildCommand: |
   # Upgrade pip to the latest
   pip install --upgrade pip
-  # Set Rust and Cargo home to writable directories
-  export RUSTUP_HOME=$HOME/.rustup
-  export CARGO_HOME=$HOME/.cargo
-  # Install Rust for building from source
-  curl https://sh.rustup.rs -sSf | sh -s -- -y
-  export PATH="$RUSTUP_HOME/bin:$PATH"
-  # Install Python dependencies, but force building psycopg2 from source
-  pip install --no-binary psycopg2 -r requirements.txt
+  # Install Python dependencies
+  pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
