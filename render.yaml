@@ -1,14 +1,9 @@
 services:
-  # Backend API (FastAPI)
   - type: web
     name: documind-api
     runtime: python
     plan: free
-    buildCommand: |
-  # Upgrade pip to the latest
-  pip install --upgrade pip
-  # Install Python dependencies
-  pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
@@ -57,7 +52,6 @@ services:
       - key: CORS_ORIGINS
         value: "https://documind-frontend.onrender.com"
 
-  # Frontend (Static Site) - static sites don't use "plan" field
   - type: web
     name: documind-frontend
     runtime: static
@@ -69,7 +63,6 @@ services:
         destination: /index.html
     autoDeploy: true
 
-  # Redis (free tier requires ipAllowList)
   - type: redis
     name: documind-redis
     plan: free
