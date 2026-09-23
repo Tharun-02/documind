@@ -7,91 +7,189 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>DocuMind</h1>
-        <nav>
-            <ul>
-                <li><a href="#" id="register-link">Register</a></li>
-                <li><a href="#" id="login-link">Login</a></li>
-                <li><a href="#" id="upload-link">Upload</a></li>
-                <li><a href="#" id="documents-link">Documents</a></li>
-                <li><a href="#" id="compare-link">Compare</a></li>
-                <li><a href="#" id="logout-link">Logout</a></li>
-            </ul>
-        </nav>
-
-        <div id="auth-section">
-            <h2>Register</h2>
-            <form id="register-form">
-                <div>
-                    <label for="reg-email">Email:</label>
-                    <input type="email" id="reg-email" required>
-                </div>
-                <div>
-                    <label for="reg-password">Password:</label>
-                    <input type="password" id="reg-password" required>
-                </div>
-                <button type="submit">Register</button>
-            </form>
-
-            <h2>Login</h2>
-            <form id="login-form">
-                <div>
-                    <label for="login-email">Email:</label>
-                    <input type="email" id="login-email" required>
-                </div>
-                <div>
-                    <label for="login-password">Password:</label>
-                    <input type="password" id="login-password" required>
-                </div>
-                <button type="submit">Login</button>
-            </form>
+    <!-- Header (shown on all views except auth) -->
+    <header id="app-header" class="hidden">
+        <div class="header-content">
+            <h1>DocuMind</h1>
+            <nav id="main-nav">
+                <button id="nav-chat" class="nav-btn active" data-view="chat">Chat</button>
+                <button id="nav-documents" class="nav-btn" data-view="documents">Documents</button>
+                <button id="logout-btn-chat" class="nav-btn btn-secondary">Logout</button>
+            </nav>
         </div>
+    </header>
 
-        <div id="upload-section">
-            <h2>Upload Document</h2>
-            <form id="upload-form">
-                <div>
-                    <label for="upload-file">PDF File:</label>
-                    <input type="file" id="upload-file" accept=".pdf" required>
+    <main id="app-main">
+        <!-- Auth View -->
+        <section id="view-auth" class="view hidden">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <h2>Welcome to DocuMind</h2>
+                    <p class="auth-subtitle">AI-powered document intelligence</p>
+
+                    <div id="auth-message" class="message hidden"></div>
+
+                    <!-- Register Form -->
+                    <form id="register-form" class="auth-form">
+                        <h3>Create Account</h3>
+                        <div class="form-group">
+                            <label for="reg-email">Email</label>
+                            <input type="email" id="reg-email" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-password">Password</label>
+                            <input type="password" id="reg-password" required autocomplete="new-password" minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Register</button>
+                    </form>
+
+                    <div class="auth-divider">
+                        <span>or</span>
+                    </div>
+
+                    <!-- Login Form -->
+                    <form id="login-form" class="auth-form hidden">
+                        <h3>Sign In</h3>
+                        <div class="form-group">
+                            <label for="login-email">Email</label>
+                            <input type="email" id="login-email" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <input type="password" id="login-password" required autocomplete="current-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+                    </form>
+
+                    <div class="auth-switch">
+                        <p id="register-link">Don't have an account? Register</p>
+                        <p id="login-link" class="hidden">Already have an account? Login</p>
+                    </div>
                 </div>
-                <button type="submit">Upload</button>
-            </form>
-            <div id="upload-result"></div>
-        </div>
+            </div>
+        </section>
 
-        <div id="documents-section">
-            <h2>My Documents</h2>
-            <button id="refresh-docs">Refresh List</button>
-            <ul id="documents-list"></ul>
-        </div>
-
-        <div id="compare-section">
-            <h2>Compare Documents</h2>
-            <form id="compare-form">
-                <div>
-                    <label for="doc1-select">Document 1:</label>
-                    <select id="doc1-select" required></select>
+        <!-- Chat View -->
+        <section id="view-chat" class="view hidden">
+            <div class="chat-container">
+                <!-- Document Picker (floating) -->
+                <div id="doc-picker-overlay" class="picker-overlay hidden"></div>
+                <div id="doc-picker" class="doc-picker hidden">
+                    <div class="picker-header">
+                        <h3>Select Documents</h3>
+                        <button id="clear-selection-btn" class="btn btn-ghost btn-sm">Clear</button>
+                    </div>
+                    <div id="doc-picker-list" class="picker-list"></div>
+                    <div class="picker-footer">
+                        <button id="manage-docs-btn" class="btn btn-secondary btn-sm">Manage Documents</button>
+                    </div>
                 </div>
-                <div>
-                    <label for="doc2-select">Document 2:</label>
-                    <select id="doc2-select" required></select>
-                </div>
-                <div>
-                    <label for="threshold">Similarity Threshold (0-1):</label>
-                    <input type="number" id="threshold" min="0" max="1" step="0.1" value="0.7" required>
-                </div>
-                <button type="submit">Compare</button>
-            </form>
-            <div id="compare-result"></div>
-        </div>
 
-        <div id="api-status">
-            <h2>API Status</h2>
-            <p id="health-check">Checking...</p>
-        </div>
-    </div>
+                <!-- Document Picker Trigger Button -->
+                <button id="doc-picker-btn" class="floating-btn" title="Select documents to chat with">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span id="selected-doc-count"></span>
+                </button>
 
-    <script src="script.js"></script>
+                <!-- Chat Messages -->
+                <div id="chat-messages" class="chat-messages">
+                    <div class="welcome-message">
+                        <h3>Welcome to DocuMind Chat</h3>
+                        <p>Upload documents, then ask questions about them.</p>
+                        <p class="hint">Click the document button <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg> to select which documents to search.</p>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <form id="chat-form" class="chat-input-form">
+                    <div class="input-wrapper">
+                        <input type="text" id="chat-input" placeholder="Ask a question about your documents..." autocomplete="off" required>
+                        <button type="submit" id="send-btn" class="btn btn-primary" aria-label="Send">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Documents View -->
+        <section id="view-documents" class="view hidden">
+            <div class="documents-container">
+                <div class="view-header">
+                    <h2>My Documents</h2>
+                    <div class="header-actions">
+                        <button id="back-to-chat" class="btn btn-secondary">Back to Chat</button>
+                        <button id="logout-btn-docs" class="btn btn-secondary">Logout</button>
+                    </div>
+                </div>
+
+                <!-- Upload Form -->
+                <form id="upload-form" class="upload-form">
+                    <div class="form-row">
+                        <div class="form-group file-input-group">
+                            <label for="upload-file">PDF File</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="upload-file" accept=".pdf" required>
+                                <span class="file-input-label">Choose PDF</span>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </div>
+                    <div id="upload-result" class="message hidden"></div>
+                </form>
+
+                <!-- Documents List -->
+                <div class="documents-list-wrapper">
+                    <div class="list-header">
+                        <h3>Uploaded Documents</h3>
+                        <button id="refresh-docs" class="btn btn-ghost btn-sm">Refresh</button>
+                    </div>
+                    <p id="documents-empty" class="empty-state hidden">No documents uploaded yet. Upload a PDF to get started.</p>
+                    <ul id="documents-list" class="documents-list"></ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Compare View (placeholder - integrated in chat) -->
+        <section id="view-compare" class="view hidden">
+            <div class="compare-container">
+                <div class="view-header">
+                    <h2>Compare Documents</h2>
+                    <button id="back-to-chat-compare" class="btn btn-secondary">Back to Chat</button>
+                </div>
+                <p class="compare-notice">Document comparison is now integrated into the chat. Ask the agent to "compare document A and document B".</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer with health status -->
+    <footer id="app-footer" class="hidden">
+        <div class="footer-content">
+            <span id="health-status" class="health-status">● Checking...</span>
+            <span class="version">DocuMind v0.1.0</span>
+        </div>
+    </footer>
+
+    <!-- Load modules in order -->
+    <script type="module" src="api.js"></script>
+    <script type="module" src="router.js"></script>
+    <script type="module" src="auth.js"></script>
+    <script type="module" src="chat.js"></script>
+    <script type="module" src="documents.js"></script>
+    <script type="module" src="compare.js"></script>
+    <script type="module">
+        // Initialize router (must be last)
+        import { initRouter } from './router.js';
+        initRouter();
+    </script>
 </body>
 </html>
