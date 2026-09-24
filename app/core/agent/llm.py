@@ -16,17 +16,17 @@
 #   always pick the same tool. Creative variation belongs in the answer (which
 #   uses a higher temp in llm_service.py).
 #
-# WHY llama-3.3-70b-versatile:
-# - Groq's free tier; reliably supports tool-calling (mixtral does not).
-# - 70B parameters = strong enough for multi-step reasoning.
-# - See docs/plans/day-6-langgraph-agent.md for the model-selection reasoning.
+# WHY qwen/qwen3.8-27b:
+# - Only chat model with tool-calling available on this Groq key (as of 2025).
+# - llama-3.3-70b-versatile was decommissioned / not available on this account.
+# - See https://console.groq.com/docs/models for current model availability.
 
 from langchain_groq import ChatGroq
 from app.config import settings
 
 
 # Default model if GROQ_MODEL isn't set in env. Hardcoded as a safety net.
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
 
 
 def build_chat_model() -> ChatGroq:
