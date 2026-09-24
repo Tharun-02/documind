@@ -1,7 +1,7 @@
 // frontend/api.js
 // Shared API helpers: token management, fetch wrappers, SSE
 
-const API_BASE = ''; // Same origin in development; set to backend URL in production
+const API_BASE = 'https://documind-api-6vyu.onrender.com'; // Backend URL in production
 
 // Token management
 function getToken() {
