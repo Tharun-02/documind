@@ -83,7 +83,10 @@ function attachEventListeners() {
                 showForm('login-form');
             } else {
                 const error = await response.json();
-                showMessage(elements.authMessage, error.detail || 'Registration failed', 'error');
+                const msg = Array.isArray(error.detail)
+                    ? error.detail.map(e => e.msg || e.message || e).join(', ')
+                    : (error.detail || 'Registration failed');
+                showMessage(elements.authMessage, msg, 'error');
             }
         } catch (err) {
             showMessage(elements.authMessage, err.message || 'Network error', 'error');
@@ -129,7 +132,10 @@ function attachEventListeners() {
                 }, 500);
             } else {
                 const error = await response.json();
-                showMessage(elements.authMessage, error.detail || 'Login failed', 'error');
+                const msg = Array.isArray(error.detail)
+                    ? error.detail.map(e => e.msg || e.message || e).join(', ')
+                    : (error.detail || 'Login failed');
+                showMessage(elements.authMessage, msg, 'error');
             }
         } catch (err) {
             showMessage(elements.authMessage, err.message || 'Network error', 'error');

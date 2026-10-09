@@ -10,11 +10,11 @@ let selectedDocumentIds = [];
 let eventSource = null;
 
 function initChatView() {
+    // Always reload documents when entering chat view
+    loadDocuments();
+
     if (chatInitialized) return;
     chatInitialized = true;
-
-    // Load user's documents for the picker
-    loadDocuments();
 
     // Set up UI event listeners
     setupEventListeners();
