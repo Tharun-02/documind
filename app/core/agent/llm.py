@@ -52,5 +52,5 @@ def build_chat_model() -> ChatGroq:
         model=model_name,
         groq_api_key=api_key,
         temperature=0.0,        # deterministic tool routing
-        max_tokens=1024,
+        max_tokens=1000,
     )
