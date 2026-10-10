@@ -8,6 +8,7 @@ let chatInitialized = false;
 let currentDocuments = [];
 let selectedDocumentIds = [];
 let eventSource = null;
+let isLoadingDocuments = false;
 
 function initChatView() {
     // Always reload documents when entering chat view
@@ -112,21 +113,38 @@ function setupEventListeners() {
 }
 
 async function loadDocuments() {
+    isLoadingDocuments = true;
+    renderDocumentPicker(); // Show loader
     try {
         const response = await API.listDocuments();
         if (response.ok) {
             const data = await response.json();
             currentDocuments = data.documents || [];
-            renderDocumentPicker();
+        } else {
+            console.error('Failed to load documents:', response.status);
         }
     } catch (err) {
         console.error('Failed to load documents:', err);
+    } finally {
+        isLoadingDocuments = false;
+        renderDocumentPicker(); // Update with data or empty state
     }
 }
 
 function renderDocumentPicker() {
     const container = document.getElementById('doc-picker-list');
     if (!container) return;
+
+    // Show loader when loading documents
+    if (isLoadingDocuments) {
+        container.innerHTML = `
+            <div class="loader">
+                <div class="spinner"></div>
+                <span>Loading documents...</span>
+            </div>
+        `;
+        return;
+    }
 
     if (currentDocuments.length === 0) {
         container.innerHTML = '<p class="empty-state">No documents uploaded yet. Go to Documents to upload.</p>';
@@ -225,10 +243,14 @@ function addMessage(role, content, isError = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}${isError ? ' error' : ''}`;
 
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'avatar';
+
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'message-bubble';
     bubbleDiv.textContent = content;
 
+    messageDiv.appendChild(avatarDiv);
     messageDiv.appendChild(bubbleDiv);
     container.appendChild(messageDiv);
 
