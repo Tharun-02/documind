@@ -4,10 +4,6 @@
 
 A full-stack document intelligence platform showcasing modern AI engineering: from FastAPI microservices architecture to LangGraph agent orchestration, vector search at scale, and real-time streaming responses.
 
-> **Live Demo:** [documind-api.onrender.com](https://documind-api.onrender.com)  
-> **API Documentation:** [documind-api.onrender.com/docs](https://documind-api.onrender.com/docs)  
-> **Frontend:** [documind-frontend.onrender.com](https://documind-frontend.onrender.com)
-
 ---
 
 ## Why This Project Matters
@@ -108,7 +104,7 @@ cache_key = f"rag:query:{hash(user_id, question, doc_versions, top_k)}"
 # Any doc change → new hash → cache miss
 ```
 
-**Current implementation:** TTL-only (1 hour). Simple, acceptable for portfolio.
+**Current implementation:** TTL-only (1 hour).
 
 ### 3. Streaming Architecture (SSE)
 
@@ -469,22 +465,6 @@ pytest tests/test_streaming.py -v -s
 - **Agent tool design**: Balancing flexibility vs. simplicity (too many tools = confusion)
 - **Streaming error handling**: SSE doesn't have status codes—error format design
 - **Pinecone metadata limits**: Restructured queries to avoid 40KB metadata limit
-
----
-
-## About the Author
-
-**Built by [Your Name]** — Software Engineer passionate about AI systems, production engineering, and developer experience.
-
-This project demonstrates:
-- **End-to-end AI system design** — From embeddings to agent orchestration to streaming
-- **Production engineering mindset** — Observability, error handling, graceful degradation
-- **Architectural thinking** — Trade-offs documented, decisions explained
-- **Full-stack capability** — Backend, frontend, infrastructure, deployment
-
-**Looking for:** GenAI roles where I can build systems at the intersection of AI and production engineering.
-
-**Contact:** [your-email@example.com] | [LinkedIn] | [Portfolio]
 
 ---
 
