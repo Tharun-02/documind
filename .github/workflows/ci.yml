@@ -1,0 +1,54 @@
+# .github/workflows/ci.yml
+#
+# CI pipeline for DocuMind.
+# Runs on every push to any branch EXCEPT master.
+# master is protected — code only reaches it via a passing PR.
+
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - master        # pushes to master are production deploys, not CI targets
+  pull_request:
+    branches:
+      - master        # any PR targeting master must pass this before merge
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    env:
+      # ── Fake credentials so imports don't crash ──────────────────────────
+      # Tests mock all external calls (Groq, Pinecone, HuggingFace, DB).
+      # These values are never sent to any real service.
+      DATABASE_URL: "postgresql+psycopg://test:test@localhost/test"
+      SECRET_KEY: "ci-secret-key-not-real"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      GROQ_API_KEY: "fake-groq-key"
+      GROQ_MODEL: "qwen/qwen3.8-27b"
+      PINECONE_API_KEY: "fake-pinecone-key"
+      PINECONE_INDEX_NAME: "documind"
+      PINECONE_ENVIRONMENT: "us-east-1-aws"
+      HUGGINGFACE_API_KEY: "fake-hf-key"
+      HUGGINGFACE_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+      EMBEDDING_PROVIDER: "huggingface"
+      REDIS_URL: "redis://localhost:6379"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"            # caches pip downloads between runs = faster CI
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
